@@ -1,4 +1,6 @@
+from os import path
 import random
+import zipfile
 import numpy as np
 import scipy.sparse as sp
 from scipy.io import loadmat
@@ -27,7 +29,9 @@ def load_data(data):
 	"""load data"""
 
 	if data == 'yelp':
-
+		if not path.exists('data/YelpChi.mat'):
+			with zipfile.ZipFile("data/YelpChi.zip", "r") as zip_ref:
+				zip_ref.extractall("data")
 		yelp = loadmat('data/YelpChi.mat')
 		homo = sparse_to_adjlist(yelp['homo'])
 		relation1 = sparse_to_adjlist(yelp['net_rur'])
@@ -37,7 +41,9 @@ def load_data(data):
 		labels = yelp['label'].flatten()
 
 	elif data == 'amazon':
-
+		if not path.exists('data/Amazon.mat'):
+			with zipfile.ZipFile("data/Amazon.zip", "r") as zip_ref:
+				zip_ref.extractall("data")
 		amz = loadmat('data/Amazon.mat')
 		homo = sparse_to_adjlist(amz['homo'])
 		relation1 = sparse_to_adjlist(amz['net_upu'])
