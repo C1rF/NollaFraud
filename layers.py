@@ -1,15 +1,10 @@
 import tensorflow as tf
-from tensorflow import keras
-from keras.layers import Layer
 
 
-class IntraAgg(Layer):
-    
-    def __init__(self, input_dim):
-        
+class IntraAgg(tf.keras.layers.Layer):
+
+    def __init__(self):
         super().__init__(trainable=False)
-        
-        self.input_dim = input_dim
-        
-    def call(self, inputs, *args, **kwargs):
+
+    def call(self, ):
         pass
