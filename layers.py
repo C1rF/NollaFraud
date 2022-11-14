@@ -1,6 +1,35 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow import keras
+from keras import layers
+# from typing import list
 
+class NollaFraud(tf.keras.Model):
+    def __init__(self, feat_data, adj_list) -> None:
+        super().__init__()
+        self.mlp = MLP(feat_data, 64)
+        self.feat_data = feat_data
+        self.adj_list = adj_list
+        self.inter_agg1 = InterAgg(64)
+        self.inter_agg2 = InterAgg(128)
+    
+    def call(self, inputs):
+        x = self.mlp(inputs)
+        x = self.inter_agg1(x, self.mlp, self.adj_list)
+        x = self.inter_agg2(x, self.mlp, self.adj_list)
+        x = layers.Dense(2, activation="softmax")(x)
+        return x
+
+
+class MLP(tf.keras.layers.Layer):
+    def __init__(self, feat_data, output_dim) -> None:
+        super().__init__()
+        self.feat_data = feat_data
+        self.output_dim = output_dim
+
+    def call(self, nodes):
+        result = layers.Dense(self.output_dim, activation="relu")(tf.gather(self.feat_data, nodes))
+        return result
 
 class IntraAgg_(tf.keras.layers.Layer):
     """Intra-aggregation layer"""
@@ -9,9 +38,9 @@ class IntraAgg_(tf.keras.layers.Layer):
 
     def call(
         self,
-        in_embeddings: tf.Tensor,
-        adj_lists: list[list[int]],
-        batch_indices: list[int]
+        in_embeddings,
+        adj_lists,
+        batch_indices
         ) -> tf.Tensor:
         for idx in batch_indices:
             neighbor_embeddings = tf.gather(in_embeddings, adj_lists[idx])
@@ -104,7 +133,7 @@ class InterAgg(tf.keras.layers.Layer):
         """
         Initialize the inter-relation aggregator
         """
-        super().__init__(trainable=False)
+        super().__init__(trainable=True)
         
         ## Set up the InterAgg variable
         self.embed_dim = embed_dim

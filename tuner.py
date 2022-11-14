@@ -10,8 +10,7 @@ import numpy as np
 import os
 import keras_tuner
 
-
-
+from layers import NollaFraud
 
 
 
@@ -34,7 +33,7 @@ parser.add_argument('--embed_dim', type=int, default=64, help='Node embedding si
 parser.add_argument('--num_epochs', type=int, default=61, help='Number of epochs.')
 parser.add_argument('--test_epochs', type=int, default=10, help='Epoch interval to run test set.')
 parser.add_argument('--seed', type=int, default=123, help='Random seed.')
-parser.add_argument('--no_cuda', action='store_true', default=False, help='Disables CUDA training.')
+parser.add_argument('--no_cuda', action='store_true', default=True, help='Disables CUDA training.')
 
 args = parser.parse_args()
 
@@ -42,6 +41,9 @@ print(f'run on {args.data}')
 
 # load topology, feature, and label
 homo, relation1, relation2, relation3, feat_data, labels = load_data(args.data)
+
+feat_data = tf.convert_to_tensor(feat_data)
+adj_lists = [relation1, relation2, relation3]
 
 np.random.seed(args.seed)
 random.seed(args.seed)
@@ -71,13 +73,14 @@ class MyHyperModel(keras_tuner.HyperModel):
 		# TODO: Replace the dummy model with the actual gnn model
 
 		# used for hyperparameter tuning, e.g. the best hiddenLayerDim that minimize loss
-		hiddenLayerDim = hp.Choice("hiddenLayerDim", [64, 128])
+		# hiddenLayerDim = hp.Choice("hiddenLayerDim", [64, 128])
 
-		inputs = keras.Input(shape=(1,), name="node_index")
-		x1 = layers.Dense(hiddenLayerDim, activation="relu")(inputs)
-		x2 = layers.Dense(hiddenLayerDim, activation="relu")(x1)
-		outputs = layers.Dense(1, name="predictions")(x2)
-		dummy_model = keras.Model(inputs=inputs, outputs=outputs)
+		# inputs = keras.Input(shape=(1,), name="node_index")
+		# x1 = layers.Dense(hiddenLayerDim, activation="relu")(inputs)
+		# x2 = layers.Dense(hiddenLayerDim, activation="relu")(x1)
+		# outputs = layers.Dense(1, name="predictions")(x2)
+
+		dummy_model = NollaFraud(feat_data, adj_lists)
 		
 		model = dummy_model
 
@@ -103,13 +106,13 @@ class MyHyperModel(keras_tuner.HyperModel):
 		# Instantiate a loss function.
 
 		# TODO: Replace the dummy loss object with the actual loss function
-		dummy_loss = keras.losses.BinaryCrossentropy(from_logits=True)
+		dummy_loss = keras.losses.BinaryCrossentropy(from_logits=False)
 		loss_fn = dummy_loss
 
 		# Prepare the metrics.
 		train_acc_metric = keras.metrics.BinaryAccuracy()
 		val_acc_metric = keras.metrics.BinaryAccuracy()
-		val_auc_metric = keras.metrics.AUC(from_logits=True)
+		val_auc_metric = keras.metrics.AUC(from_logits=False)
 		val_precision_metric = keras.metrics.Precision()
 		val_recall_metric = keras.metrics.Recall()
 		# TODO: Find a method to calculate f1scores
