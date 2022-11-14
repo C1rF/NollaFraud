@@ -121,7 +121,7 @@ class MyHyperModel(keras_tuner.HyperModel):
 		val_epoch_loss_avg = keras.metrics.Mean()
 
 
-		@tf.function
+		# @tf.function
 		def run_train_step(x_batch_train, y_batch_train):
 			with tf.GradientTape() as tape:
 				logits = model(x_batch_train, training=True)
@@ -138,7 +138,7 @@ class MyHyperModel(keras_tuner.HyperModel):
 		for callback in callbacks:
 			callback.model = model
 
-		@tf.function
+		# @tf.function
 		def run_val_step(x_batch_val, y_batch_val):
 			val_logits = model(x_batch_val, training=False)
 			loss_value = loss_fn(y_batch_val, val_logits)

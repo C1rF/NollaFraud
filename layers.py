@@ -10,13 +10,14 @@ class NollaFraud(tf.keras.Model):
         self.mlp = MLP(feat_data, 64)
         self.feat_data = feat_data
         self.adj_list = adj_list
-        self.inter_agg1 = InterAgg(64)
-        self.inter_agg2 = InterAgg(128)
+        self.inter_agg1 = InterAgg(64, self.mlp)
+        self.inter_agg2 = InterAgg(128, self.inter_agg1)
     
     def call(self, inputs):
-        x = self.mlp(inputs)
-        x = self.inter_agg1(x, self.mlp, self.adj_list)
-        x = self.inter_agg2(x, self.mlp, self.adj_list)
+        # x = self.mlp(inputs)
+        # x = self.inter_agg1(inputs, self.mlp, self.adj_list)
+        print(inputs)
+        x = self.inter_agg2(inputs, self.adj_list)
         x = layers.Dense(2, activation="softmax")(x)
         return x
 
@@ -129,7 +130,7 @@ def weight_inter_agg(num_relations, neighbor_features, embed_dim, alpha, batch_s
 
 class InterAgg(tf.keras.layers.Layer):
 
-    def __init__(self, embed_dim):
+    def __init__(self, embed_dim, previous_layer):
         """
         Initialize the inter-relation aggregator
         """
@@ -137,6 +138,7 @@ class InterAgg(tf.keras.layers.Layer):
         
         ## Set up the InterAgg variable
         self.embed_dim = embed_dim
+        self.previous_layer = previous_layer
         ## Glorot uniform initializer = Xavier uniform initializer
         initializer = tf.keras.initializers.GlorotUniform()
         self.alpha = tf.Variable(initial_value = initializer( shape=(self.embed_dim*2, 3), dtype='float32' ) , trainable=True)
@@ -146,13 +148,17 @@ class InterAgg(tf.keras.layers.Layer):
         self.intraAgg3 = IntraAgg()
         
 
-    def call(self, nodes, features, adj_lists):
+    def call(self, nodes, adj_lists):
         """
         :param nodes: a list of batch node indices (global)
         :param features: features of all nodes 
         :param adj_lists: a list of adjacency lists for each single-relation graph = [adj_lists_1, adj_lists_2, adj_lists_3]
         """
         ## sum of neighbors of nodes in a full batch
+
+        if not isinstance(nodes, list):
+            nodes = nodes.numpy().tolist()
+        
         neighbors_for_batch_nodes = []
         for adj_list in adj_lists:
             neighbors_for_batch_nodes.append(   [  set(adj_list[int(node)]) for node in nodes   ]   )
@@ -164,7 +170,8 @@ class InterAgg(tf.keras.layers.Layer):
         unique_nodes_new_index_dictionary = {n: i for i, n in enumerate(list(unique_nodes_in_combined_set))}
         
         ## extract features of nodes in combined_set from all features
-        combined_set_features = features(list(unique_nodes_in_combined_set))
+        print(list(unique_nodes_in_combined_set))
+        combined_set_features = self.previous_layer(list(unique_nodes_in_combined_set), adj_lists)
         
         ## get lists of neighbors' indices for each relation
         r1_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[0]] # [set,...,set] 
