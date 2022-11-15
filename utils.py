@@ -7,6 +7,9 @@ from scipy.io import loadmat
 from sklearn.metrics import f1_score, recall_score, roc_auc_score, average_precision_score, precision_score
 from collections import defaultdict
 
+def print_with_color(s):
+    print("\x1B[36m {} \x1B[0m".format(s))
+
 def sparse_to_adjlist(sp_matrix):
 
 	"""Transfer sparse matrix to adjacency list"""

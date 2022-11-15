@@ -1,24 +1,39 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from keras import layers
-# from typing import list
+from keras import layers, initializers
+from utils import *
 
 class NollaFraud(tf.keras.Model):
-    def __init__(self, feat_data, adj_lists) -> None:
+    def __init__(self, feat_data, adj_lists, prior) -> None:
         super().__init__()
         self.mlp = MLP(feat_data, 64)
         self.feat_data = feat_data
         self.adj_lists = adj_lists
+        self.prior = prior
         self.inter_agg1 = InterAgg(64, self.mlp, self.adj_lists)
         self.inter_agg2 = InterAgg(128, self.inter_agg1, self.adj_lists)
     
     def call(self, inputs):
         # x = self.mlp(inputs)
         # x = self.inter_agg1(inputs, self.mlp, self.adj_list)
-        print('Input to the model: ',inputs)
+        print('Input to the model: ', inputs)
         x = self.inter_agg2(inputs)
-        x = layers.Dense(2, activation="softmax")(x)
+        # print_with_color('AFTER_AGG: ')
+        # l = 0
+        # for element in x:
+        #     if l > 10: break
+        #     print(element)
+        #     l += 1
+        x = layers.Dense(2)(x)
+        x = layers.LeakyReLU(alpha=0.3)(x)
+        # print_with_color("AGG RES:")
+        # print_with_color(x)
+        x = layers.Dense(1, activation="sigmoid")(tf.cast(x, tf.float64) + tf.cast(tf.math.log(self.prior), tf.float64))
+        # x = layers.Softmax()(x)
+        # x = tf.math.argmax(x, 1)
+        # print("SCORE: ", x)
+
         return x
 
 
@@ -29,23 +44,29 @@ class MLP(tf.keras.layers.Layer):
         self.output_dim = output_dim
 
     def call(self, nodes):
-        result = layers.Dense(self.output_dim, activation="relu")(tf.gather(self.feat_data, nodes))
+        result = layers.Dense(self.output_dim, 
+            activation="relu"
+            # kernel_initializer=initializers.Ones(),
+            # bias_initializer=initializers.Ones(),
+            )(tf.gather(self.feat_data, nodes))
+        print_with_color("MLP result:")
+        print_with_color(result)
         return result
 
-class IntraAgg_(tf.keras.layers.Layer):
-    """Intra-aggregation layer"""
-    def __init__(self) -> None:
-        super().__init__(trainable=False)
+# class IntraAgg_(tf.keras.layers.Layer):
+#     """Intra-aggregation layer"""
+#     def __init__(self) -> None:
+#         super().__init__(trainable=False)
 
-    def call(
-        self,
-        in_embeddings,
-        adj_lists,
-        batch_indices
-        ) -> tf.Tensor:
-        for idx in batch_indices:
-            neighbor_embeddings = tf.gather(in_embeddings, adj_lists[idx])
-            mean_embedding = tf.reduce_mean(neighbor_embeddings, 0)
+#     def call(
+#         self,
+#         in_embeddings,
+#         adj_lists,
+#         batch_indices
+#         ) -> tf.Tensor:
+#         for idx in batch_indices:
+#             neighbor_embeddings = tf.gather(in_embeddings, adj_lists[idx])
+#             mean_embedding = tf.reduce_mean(neighbor_embeddings, 0)
 
 
 class IntraAgg(tf.keras.layers.Layer):
@@ -88,6 +109,7 @@ class IntraAgg(tf.keras.layers.Layer):
         num_neighbors = mask.sum(1, keepdims=True)
         #mask = torch.true_divide(mask, num_neigh)
         mask = mask / num_neighbors
+        # print("MASK: ", mask)
 
         neighbors_new_index = [unique_nodes_new_index[n]
                                for n in unique_nodes_list]
@@ -116,7 +138,7 @@ def weight_inter_agg(num_relations, neighbor_features, embed_dim, alpha, batch_s
     
     ## transpose of neighbor_features
     neighbor_features_T = tf.transpose(neighbor_features)
-    print("neighbor shape: ", neighbor_features.shape)
+    # print("neighbor shape: ", neighbor_features.shape)
     
     ## apply softmax function on trainable parameter alpha
     W = tf.nn.softmax(alpha, axis = 1)
@@ -124,7 +146,7 @@ def weight_inter_agg(num_relations, neighbor_features, embed_dim, alpha, batch_s
     ## results to be returned
     weighted_sum = tf.zeros(shape=(embed_dim, batch_size), dtype=tf.dtypes.float32)
     for r in range(num_relations):
-        temp = tf.repeat(tf.reshape(W[:, 1], (embed_dim, 1)), repeats=batch_size, axis = 1)
+        temp = tf.repeat(tf.reshape(W[:, r], (embed_dim, 1)), repeats=batch_size, axis = 1)
         weighted_sum += tf.math.multiply(temp, neighbor_features_T[:, r*batch_size:(r+1)*batch_size])
         
     return tf.transpose(weighted_sum)
@@ -163,7 +185,7 @@ class InterAgg(tf.keras.layers.Layer):
         if not isinstance(nodes, list):
             nodes = nodes.numpy().tolist()
         
-        print("Length of nodes: ", len(nodes))
+        # print("Length of nodes: ", len(nodes))
         neighbors_for_batch_nodes = []
         for adj_list in self.adj_lists:
             neighbors_for_batch_nodes.append(   [  set(adj_list[int(node)]) for node in nodes   ]   )
@@ -175,9 +197,9 @@ class InterAgg(tf.keras.layers.Layer):
         unique_nodes_new_index_dictionary = {n: i for i, n in enumerate(list(unique_nodes_in_combined_set))}
         
         ## extract features of nodes in combined_set from all features
-        print("Inputs to the previous layer in InterAgg: ",list(unique_nodes_in_combined_set))
+        # print("Inputs to the previous layer in InterAgg: ",list(unique_nodes_in_combined_set))
         combined_set_features = self.previous_layer(tf.constant(list(unique_nodes_in_combined_set)))
-        print("Previous Layer Output Shape: ", combined_set_features.shape)
+        # print("Previous Layer Output Shape: ", combined_set_features.shape)
         
         ## get lists of neighbors' indices for each relation
         r1_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[0]] # [set,...,set] 
@@ -187,8 +209,8 @@ class InterAgg(tf.keras.layers.Layer):
         ## get the local index of all batch nodes
         batch_nodes_new_index = [unique_nodes_new_index_dictionary[int(n)] for n in nodes]
         
-        print("Length of batch_nodes_new_index: ", len(batch_nodes_new_index))
-        print("New Index:", batch_nodes_new_index)
+        # print("Length of batch_nodes_new_index: ", len(batch_nodes_new_index))
+        # print("New Index:", batch_nodes_new_index)
         ## get the features of all batch nodes (it is part of combined_set_features by excluding the neighbors' rows)
         ## batch_nodes_features = combined_set_features[batch_nodes_new_index]
         batch_nodes_features = tf.gather(combined_set_features, batch_nodes_new_index)
@@ -204,11 +226,11 @@ class InterAgg(tf.keras.layers.Layer):
   
         ## get the batch size
         batch_size = len(nodes)
-        print("Length of adj_lists: ", len(self.adj_lists))
-        print("Shape of neighbors_features_all_relations_concat: ", neighbors_features_all_relations_concat.shape)
-        print("Embedding Dimension: ", self.embed_dim)
-        print("Alpha Shape: ", self.alpha.shape)
-        print("Batch Size: ", batch_size)
+        # print("Length of adj_lists: ", len(self.adj_lists))
+        # print("Shape of neighbors_features_all_relations_concat: ", neighbors_features_all_relations_concat.shape)
+        # print("Embedding Dimension: ", self.embed_dim)
+        # print("Alpha Shape: ", self.alpha.shape)
+        # print("Batch Size: ", batch_size)
         
         ## compute the weighted sum 
         inter_layer_outputs = weight_inter_agg( len(self.adj_lists) , neighbors_features_all_relations_concat, self.embed_dim * 2, self.alpha, batch_size)

@@ -2,18 +2,13 @@ import argparse
 from sklearn.model_selection import train_test_split
 from utils import *
 
-from math import inf
 import tensorflow as tf
 from tensorflow import keras
 from keras import layers
 import numpy as np
-import os
 import keras_tuner
 
 from layers import NollaFraud
-
-
-
 
 
 """
@@ -42,6 +37,7 @@ print(f'run on {args.data}')
 # load topology, feature, and label
 homo, relation1, relation2, relation3, feat_data, labels = load_data(args.data)
 
+feat_data = normalize(feat_data) 
 feat_data = tf.convert_to_tensor(feat_data)
 adj_lists = [relation1, relation2, relation3]
 
@@ -57,13 +53,17 @@ if args.data == 'yelp':
 elif args.data == 'amazon':
 	# 0-3304 are unlabeled nodes
 	index = list(range(3305, len(labels)))
-	x_train, x_val, y_train, y_val = train_test_split(index, labels[3305:], stratify = labels[3305:],
-															test_size = 0.90, random_state = 2, shuffle = True)
+	x_train, x_val, y_train, y_val = train_test_split(index, labels[3305:],
+															test_size = 0.90, random_state = 2, shuffle = False)
+	# y_train = tf.one_hot(y_train, depth=len(labels))
 else:
 	exit("Dataset not supported")
 
-
-
+num_1 = len(np.where(y_train == 1)[0])
+num_2 = len(np.where(y_train == 0)[0])
+p0 = (num_1 / (num_1 + num_2))
+p1 = 1 - p0
+prior = np.array([p1, p0])
 
 
 class MyHyperModel(keras_tuner.HyperModel):
@@ -80,7 +80,7 @@ class MyHyperModel(keras_tuner.HyperModel):
 		# x2 = layers.Dense(hiddenLayerDim, activation="relu")(x1)
 		# outputs = layers.Dense(1, name="predictions")(x2)
 
-		dummy_model = NollaFraud(feat_data, adj_lists)
+		dummy_model = NollaFraud(feat_data, adj_lists, prior)
 		
 		model = dummy_model
 
@@ -92,7 +92,7 @@ class MyHyperModel(keras_tuner.HyperModel):
 		batch_size = hp.Int("batch_size", 32, 128, step=32)
 		# Prepare the training dataset.
 		train_dataset = tf.data.Dataset.from_tensor_slices((x, y))
-		train_dataset = train_dataset.shuffle(buffer_size=1024).batch(batch_size)
+		train_dataset = train_dataset.batch(batch_size)
 
 		# Prepare the validation dataset.
 		val_dataset = tf.data.Dataset.from_tensor_slices(validation_data)
@@ -125,6 +125,10 @@ class MyHyperModel(keras_tuner.HyperModel):
 		def run_train_step(x_batch_train, y_batch_train):
 			with tf.GradientTape() as tape:
 				logits = model(x_batch_train, training=True)
+				print_with_color("SCORE:")
+				print_with_color(logits)
+				print_with_color("LABELS:")
+				print_with_color(y_batch_train)
 				loss_value = loss_fn(y_batch_train, logits)
 			grads = tape.gradient(loss_value, model.trainable_weights)
 			optimizer.apply_gradients(zip(grads, model.trainable_weights))
@@ -156,7 +160,7 @@ class MyHyperModel(keras_tuner.HyperModel):
 		# Record the best validation loss value
 		best_epoch_loss = float("inf")
 
-		epochs = 10
+		epochs = 1
 		for epoch in range(epochs):
 			# Iterate over the batches of the dataset.
 			for step, (x_batch_train, y_batch_train) in enumerate(train_dataset):
@@ -178,33 +182,33 @@ class MyHyperModel(keras_tuner.HyperModel):
 			train_acc_metric.reset_states()
 
 
-			# Run a validation loop at the end of each epoch.
-			for x_batch_val, y_batch_val in val_dataset:
-				val_loss_value = run_val_step(x_batch_val, y_batch_val)
+			# # Run a validation loop at the end of each epoch.
+			# for x_batch_val, y_batch_val in val_dataset:
+			# 	val_loss_value = run_val_step(x_batch_val, y_batch_val)
 
-			val_acc = val_acc_metric.result()
-			val_auc = val_auc_metric.result()
-			val_precision = val_precision_metric.result()
-			val_recall = val_recall_metric.result()
-			# val_f1 = val_f1_metric.result()
-			val_loss = float(val_epoch_loss_avg.result().numpy())
-			for callback in callbacks:
-				# callback.on_epoch_end(epoch, logs={"val_loss": float(format(float(val_loss), ".4f"))})
-				callback.on_epoch_end(epoch, logs={"epoch_loss": val_loss})
-			val_acc_metric.reset_states()
-			val_auc_metric.reset_states()
-			val_precision_metric.reset_states()
-			val_recall_metric.reset_states()
-			# val_f1_metric.reset_states()
-			val_epoch_loss_avg.reset_states()
-			print("Validation acc: %.4f" % (float(val_acc),))
-			print("Validation auc: %.4f" % (float(val_auc),))
-			print("Validation precision: %.4f" % (float(val_precision),))
-			print("Validation recall: %.4f" % (float(val_recall),))
-			# print("Validation f1: %.4f" % (float(val_f1),))
-			print("Validation loss: %.4f" % (float(val_loss),))
+			# val_acc = val_acc_metric.result()
+			# val_auc = val_auc_metric.result()
+			# val_precision = val_precision_metric.result()
+			# val_recall = val_recall_metric.result()
+			# # val_f1 = val_f1_metric.result()
+			# val_loss = float(val_epoch_loss_avg.result().numpy())
+			# for callback in callbacks:
+			# 	# callback.on_epoch_end(epoch, logs={"val_loss": float(format(float(val_loss), ".4f"))})
+			# 	callback.on_epoch_end(epoch, logs={"epoch_loss": val_loss})
+			# val_acc_metric.reset_states()
+			# val_auc_metric.reset_states()
+			# val_precision_metric.reset_states()
+			# val_recall_metric.reset_states()
+			# # val_f1_metric.reset_states()
+			# val_epoch_loss_avg.reset_states()
+			# print("Validation acc: %.4f" % (float(val_acc),))
+			# print("Validation auc: %.4f" % (float(val_auc),))
+			# print("Validation precision: %.4f" % (float(val_precision),))
+			# print("Validation recall: %.4f" % (float(val_recall),))
+			# # print("Validation f1: %.4f" % (float(val_f1),))
+			# print("Validation loss: %.4f" % (float(val_loss),))
 
-			best_epoch_loss = float(min(best_epoch_loss, val_loss))
+			# best_epoch_loss = float(min(best_epoch_loss, val_loss))
 
 		return best_epoch_loss
 
