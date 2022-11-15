@@ -38,7 +38,7 @@ print(f'run on {args.data}')
 homo, relation1, relation2, relation3, feat_data, labels = load_data(args.data)
 
 feat_data = normalize(feat_data) 
-feat_data = tf.convert_to_tensor(feat_data)
+# feat_data = tf.convert_to_tensor(feat_data)
 adj_lists = [relation1, relation2, relation3]
 
 np.random.seed(args.seed)
@@ -99,36 +99,36 @@ class MyHyperModel(keras_tuner.HyperModel):
 		val_dataset = val_dataset.batch(batch_size)
 
 		# Instantiate an optimizer.
-		learningRate = hp.Choice("learningRate", [1e-5, 2e-5, 3e-5, 4e-5])
+		learningRate = hp.Choice("learningRate", [0.1])
 		optimizer = keras.optimizers.Adam(learning_rate=learningRate)
 		
 		
 		# Instantiate a loss function.
 
 		# TODO: Replace the dummy loss object with the actual loss function
-		dummy_loss = keras.losses.BinaryCrossentropy(from_logits=False)
+		dummy_loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 		loss_fn = dummy_loss
 
 		# Prepare the metrics.
-		train_acc_metric = keras.metrics.BinaryAccuracy()
-		val_acc_metric = keras.metrics.BinaryAccuracy()
-		val_auc_metric = keras.metrics.AUC(from_logits=False)
-		val_precision_metric = keras.metrics.Precision()
-		val_recall_metric = keras.metrics.Recall()
+		train_acc_metric = keras.metrics.SparseCategoricalAccuracy()
+		# val_acc_metric = keras.metrics.SparseCategoricalAccuracy()
+		# val_auc_metric = keras.metrics.AUC(from_logits=True)
+		# val_precision_metric = keras.metrics.Precision()
+		# val_recall_metric = keras.metrics.Recall()
 		# TODO: Find a method to calculate f1scores
 		# val_f1_metric = tfa.metrics.F1Score(num_classes=2)
 
-		val_epoch_loss_avg = keras.metrics.Mean()
+		# val_epoch_loss_avg = keras.metrics.Mean()
 
 
 		# @tf.function
 		def run_train_step(x_batch_train, y_batch_train):
 			with tf.GradientTape() as tape:
 				logits = model(x_batch_train, training=True)
-				print_with_color("SCORE:")
-				print_with_color(logits)
-				print_with_color("LABELS:")
-				print_with_color(y_batch_train)
+				# print_with_color("SCORE:")
+				# print_with_color(logits)
+				# print_with_color("LABELS:")
+				# print_with_color(y_batch_train)
 				loss_value = loss_fn(y_batch_train, logits)
 			grads = tape.gradient(loss_value, model.trainable_weights)
 			optimizer.apply_gradients(zip(grads, model.trainable_weights))
@@ -143,18 +143,18 @@ class MyHyperModel(keras_tuner.HyperModel):
 			callback.model = model
 
 		# @tf.function
-		def run_val_step(x_batch_val, y_batch_val):
-			val_logits = model(x_batch_val, training=False)
-			loss_value = loss_fn(y_batch_val, val_logits)
-			# Update val metrics
-			val_acc_metric.update_state(y_batch_val, val_logits)
-			val_auc_metric.update_state(y_batch_val, val_logits)
-			val_precision_metric.update_state(y_batch_val, val_logits)
-			val_recall_metric.update_state(y_batch_val, val_logits)
-			# val_f1_metric.update_state(y_batch_val, val_logits)
-			val_epoch_loss_avg.update_state(loss_value)
+		# def run_val_step(x_batch_val, y_batch_val):
+		# 	val_logits = model(x_batch_val, training=False)
+		# 	loss_value = loss_fn(y_batch_val, val_logits)
+		# 	# Update val metrics
+		# 	val_acc_metric.update_state(y_batch_val, val_logits)
+		# 	val_auc_metric.update_state(y_batch_val, val_logits)
+		# 	val_precision_metric.update_state(y_batch_val, val_logits)
+		# 	val_recall_metric.update_state(y_batch_val, val_logits)
+		# 	# val_f1_metric.update_state(y_batch_val, val_logits)
+		# 	val_epoch_loss_avg.update_state(loss_value)
 
-			return loss_value
+		# 	return loss_value
 
 
 		# Record the best validation loss value
@@ -165,21 +165,22 @@ class MyHyperModel(keras_tuner.HyperModel):
 			# Iterate over the batches of the dataset.
 			for step, (x_batch_train, y_batch_train) in enumerate(train_dataset):
 				loss_value = run_train_step(x_batch_train, y_batch_train)
-
 				# Log every 200 batches.
-				if step % 200 == 0:
-					print(
-						"Training loss (for one batch) at step %d: %.4f"
-						% (step, float(loss_value))
-					)
-					print("Seen so far: %d samples" % ((step + 1) * batch_size))
+				# if step % 200 == 0:
+				print(
+					"Training loss (for one batch) at step %d: %.4f"
+					% (step, float(loss_value))
+				)
+				# print("Seen so far: %d samples" % ((step + 1) * batch_size))
+			
+				# for layer in model.layers: print(layer.get_config(), layer.get_weights())
+			
+				# Display metrics at the end of each epoch.
+				train_acc = train_acc_metric.result()
+				print("Training acc over epoch: %.4f" % (float(train_acc),))
 
-			# Display metrics at the end of each epoch.
-			train_acc = train_acc_metric.result()
-			print("Training acc over epoch: %.4f" % (float(train_acc),))
-
-			# Reset training metrics at the end of each epoch
-			train_acc_metric.reset_states()
+				# Reset training metrics at the end of each epoch
+				train_acc_metric.reset_states()
 
 
 			# # Run a validation loop at the end of each epoch.

@@ -7,6 +7,8 @@ from scipy.io import loadmat
 from sklearn.metrics import f1_score, recall_score, roc_auc_score, average_precision_score, precision_score
 from collections import defaultdict
 
+random.seed(1)
+
 def print_with_color(s):
     print("\x1B[36m {} \x1B[0m".format(s))
 

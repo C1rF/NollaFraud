@@ -13,28 +13,38 @@ class NollaFraud(tf.keras.Model):
         self.prior = prior
         self.inter_agg1 = InterAgg(64, self.mlp, self.adj_lists)
         self.inter_agg2 = InterAgg(128, self.inter_agg1, self.adj_lists)
+        self.linear = layers.Dense(2)
     
     def call(self, inputs):
         # x = self.mlp(inputs)
         # x = self.inter_agg1(inputs, self.mlp, self.adj_list)
-        print('Input to the model: ', inputs)
+        # print('Input to the model: ', inputs)
         x = self.inter_agg2(inputs)
+
         # print_with_color('AFTER_AGG: ')
         # l = 0
         # for element in x:
         #     if l > 10: break
         #     print(element)
         #     l += 1
-        x = layers.Dense(2)(x)
-        x = layers.LeakyReLU(alpha=0.3)(x)
+        x = self.linear(x)
+
+        x = tf.cast(x, tf.float64) + tf.cast(tf.math.log(self.prior), tf.float64)
+    
+        # print_with_color("loss scores_model")
+        # print_with_color(tf.cast(x, tf.float64) + tf.cast(tf.math.log(self.prior), tf.float64))
+
+        
+        # x = layers.LeakyReLU(alpha=0.3)(x)
         # print_with_color("AGG RES:")
         # print_with_color(x)
-        x = layers.Dense(1, activation="sigmoid")(tf.cast(x, tf.float64) + tf.cast(tf.math.log(self.prior), tf.float64))
+        # x = layers.Dense(1, activation="sigmoid")(tf.cast(x, tf.float64) + tf.cast(tf.math.log(self.prior), tf.float64))
         # x = layers.Softmax()(x)
         # x = tf.math.argmax(x, 1)
         # print("SCORE: ", x)
-
         return x
+
+    # def print_stats():
 
 
 class MLP(tf.keras.layers.Layer):
@@ -44,13 +54,23 @@ class MLP(tf.keras.layers.Layer):
         self.output_dim = output_dim
 
     def call(self, nodes):
+        # print('Input to the MLP: ', nodes)
+
+        initializer = initializers.Constant(self.feat_data)
+        features = layers.Embedding(
+            self.feat_data.shape[0],
+            self.feat_data.shape[1],
+            input_length=len(nodes),
+            embeddings_initializer=initializer
+        )
+
         result = layers.Dense(self.output_dim, 
             activation="relu"
-            # kernel_initializer=initializers.Ones(),
-            # bias_initializer=initializers.Ones(),
-            )(tf.gather(self.feat_data, nodes))
-        print_with_color("MLP result:")
-        print_with_color(result)
+            )(features(nodes))
+        # print_with_color("MLP result:")
+        # print_with_color(result)
+        # print_with_color("MLP embedding:")
+        # print_with_color(features(nodes))
         return result
 
 # class IntraAgg_(tf.keras.layers.Layer):
@@ -72,7 +92,7 @@ class MLP(tf.keras.layers.Layer):
 class IntraAgg(tf.keras.layers.Layer):
 
     def __init__(self) -> None:
-        super().__init__(trainable=False)
+        super().__init__()
 
     def call(self, embedding, nodes, neighbor_lists, unique_nodes_new_index, self_feats):
         """
@@ -167,7 +187,7 @@ class InterAgg(tf.keras.layers.Layer):
         self.adj_lists = adj_lists
         ## Glorot uniform initializer = Xavier uniform initializer
         initializer = tf.keras.initializers.GlorotUniform()
-        self.alpha = tf.Variable(initial_value = initializer( shape=(self.embed_dim*2, 3), dtype='float32' ) , trainable=True)
+        self.alpha = tf.Variable(initial_value = initializer(shape=(self.embed_dim*2, 3), dtype='float32') , trainable=True)
         ## Initialize 3 IntraAgg objects for 3 relations
         self.intraAgg1 = IntraAgg()
         self.intraAgg2 = IntraAgg()
@@ -201,6 +221,9 @@ class InterAgg(tf.keras.layers.Layer):
         combined_set_features = self.previous_layer(tf.constant(list(unique_nodes_in_combined_set)))
         # print("Previous Layer Output Shape: ", combined_set_features.shape)
         
+        # print("current embedding dim: ", self.embed_dim)
+        # print("BATCH FEATURES: ", combined_set_features)
+
         ## get lists of neighbors' indices for each relation
         r1_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[0]] # [set,...,set] 
         r2_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[1]] # [set,...,set] 
@@ -208,6 +231,7 @@ class InterAgg(tf.keras.layers.Layer):
         
         ## get the local index of all batch nodes
         batch_nodes_new_index = [unique_nodes_new_index_dictionary[int(n)] for n in nodes]
+        # print("batch nodes new index: ", batch_nodes_new_index)
         
         # print("Length of batch_nodes_new_index: ", len(batch_nodes_new_index))
         # print("New Index:", batch_nodes_new_index)
@@ -215,6 +239,8 @@ class InterAgg(tf.keras.layers.Layer):
         ## batch_nodes_features = combined_set_features[batch_nodes_new_index]
         batch_nodes_features = tf.gather(combined_set_features, batch_nodes_new_index)
         
+        # print("self features: ", batch_nodes_features)
+
         r1_new_embedding_features = self.intraAgg1(combined_set_features[:, -self.embed_dim:], nodes, r1_list, unique_nodes_new_index_dictionary, batch_nodes_features[:, -self.embed_dim:])
         r2_new_embedding_features = self.intraAgg2(combined_set_features[:, -self.embed_dim:], nodes, r2_list, unique_nodes_new_index_dictionary, batch_nodes_features[:, -self.embed_dim:])
         r3_new_embedding_features = self.intraAgg3(combined_set_features[:, -self.embed_dim:], nodes, r3_list, unique_nodes_new_index_dictionary, batch_nodes_features[:, -self.embed_dim:])
@@ -223,6 +249,8 @@ class InterAgg(tf.keras.layers.Layer):
                                                              r2_new_embedding_features, 
                                                              r3_new_embedding_features), 
                                                             axis = 0)
+        
+        # print("neighbor features: ", neighbors_features_all_relations_concat)
   
         ## get the batch size
         batch_size = len(nodes)
@@ -235,6 +263,7 @@ class InterAgg(tf.keras.layers.Layer):
         ## compute the weighted sum 
         inter_layer_outputs = weight_inter_agg( len(self.adj_lists) , neighbors_features_all_relations_concat, self.embed_dim * 2, self.alpha, batch_size)
         
+        # print("inter layer outputs: ", inter_layer_outputs)
         result = tf.concat((batch_nodes_features, inter_layer_outputs), axis = 1)
         
         return result
