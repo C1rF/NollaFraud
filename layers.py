@@ -53,7 +53,7 @@ class IntraAgg(tf.keras.layers.Layer):
     def __init__(self) -> None:
         super().__init__(trainable=False)
 
-    def forward(self, embedding, nodes, neighbor_lists, unique_nodes_new_index, self_feats):
+    def call(self, embedding, nodes, neighbor_lists, unique_nodes_new_index, self_feats):
         """
         Code partially from https://github.com/williamleif/graphsage-simple/
         :param nodes: list of nodes in a batch
@@ -71,7 +71,7 @@ class IntraAgg(tf.keras.layers.Layer):
 
         # CirF: Both source and destination nodes are in the block
         # mask = tf.zeros(len(neighbor_lists), len(unique_nodes))
-        mask = np.zeros(len(neighbor_lists), len(unique_nodes))
+        mask = np.zeros((len(neighbor_lists), len(unique_nodes)))
 
         column_indices = [unique_nodes[n]
                           for neighbor_list in neighbor_lists for n in neighbor_list]
@@ -85,16 +85,18 @@ class IntraAgg(tf.keras.layers.Layer):
 
         mask[row_indices, column_indices] = 1
 
-        num_neighbors = mask.sum(1, keepdim=True)
+        num_neighbors = mask.sum(1, keepdims=True)
         #mask = torch.true_divide(mask, num_neigh)
         mask = mask / num_neighbors
 
         neighbors_new_index = [unique_nodes_new_index[n]
                                for n in unique_nodes_list]
 
-        embed_matrix = embedding[neighbors_new_index]
+        embed_matrix = tf.gather(embedding, neighbors_new_index)
 
+        embed_matrix = tf.cast(embed_matrix, tf.float64)
         _feats_1 = tf.matmul(mask, embed_matrix)
+        _feats_1 = tf.cast(_feats_1, tf.float32)
 
         # difference
         _feats_2 = self_feats - _feats_1
@@ -114,6 +116,7 @@ def weight_inter_agg(num_relations, neighbor_features, embed_dim, alpha, batch_s
     
     ## transpose of neighbor_features
     neighbor_features_T = tf.transpose(neighbor_features)
+    print("neighbor shape: ", neighbor_features.shape)
     
     ## apply softmax function on trainable parameter alpha
     W = tf.nn.softmax(alpha, axis = 1)
@@ -121,7 +124,7 @@ def weight_inter_agg(num_relations, neighbor_features, embed_dim, alpha, batch_s
     ## results to be returned
     weighted_sum = tf.zeros(shape=(embed_dim, batch_size), dtype=tf.dtypes.float32)
     for r in range(num_relations):
-        temp = tf.repeat( tf.reshape(W[:,1],(embed_dim,1)) ,repeats=batch_size, axis = 1)
+        temp = tf.repeat(tf.reshape(W[:, 1], (embed_dim, 1)), repeats=batch_size, axis = 1)
         weighted_sum += tf.math.multiply(temp, neighbor_features_T[:, r*batch_size:(r+1)*batch_size])
         
     return tf.transpose(weighted_sum)
