@@ -6,3 +6,4 @@ layers_debug.py
 tuner_test.py
 tuner_test2.py
 temp/
+*.png
