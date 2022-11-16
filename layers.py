@@ -6,28 +6,23 @@ from utils import *
 
 class NollaFraud(tf.keras.Model):
     def __init__(self, feat_data, adj_lists, prior) -> None:
-        super().__init__()
+        super(NollaFraud, self).__init__()
         self.mlp = MLP(feat_data, 64)
         self.feat_data = feat_data
         self.adj_lists = adj_lists
         self.prior = prior
         self.inter_agg1 = InterAgg(64, self.mlp, self.adj_lists)
         self.inter_agg2 = InterAgg(128, self.inter_agg1, self.adj_lists)
-        self.linear = layers.Dense(2)
+
+        initializer = tf.keras.initializers.GlorotUniform()
+        self.linear_weights = tf.Variable(initial_value = initializer(shape=(448, 2), dtype='float32'), trainable=True)
     
     def call(self, inputs):
         # x = self.mlp(inputs)
         # x = self.inter_agg1(inputs, self.mlp, self.adj_list)
         # print('Input to the model: ', inputs)
         x = self.inter_agg2(inputs)
-
-        # print_with_color('AFTER_AGG: ')
-        # l = 0
-        # for element in x:
-        #     if l > 10: break
-        #     print(element)
-        #     l += 1
-        x = self.linear(x)
+        x = tf.linalg.matmul(x, self.linear_weights)
 
         x = tf.cast(x, tf.float64) + tf.cast(tf.math.log(self.prior), tf.float64)
     
@@ -44,14 +39,17 @@ class NollaFraud(tf.keras.Model):
         # print("SCORE: ", x)
         return x
 
-    # def print_stats():
+    def print_stats(self):
+        print(self.linear.get_config(), self.linear.get_weights())
 
 
 class MLP(tf.keras.layers.Layer):
     def __init__(self, feat_data, output_dim) -> None:
-        super().__init__()
+        super(MLP, self).__init__()
         self.feat_data = feat_data
         self.output_dim = output_dim
+        initializer = tf.keras.initializers.GlorotUniform()
+        self.mlp_weights = tf.Variable(initial_value = initializer(shape=(25, 64), dtype='float32'), trainable=True)
 
     def call(self, nodes):
         # print('Input to the MLP: ', nodes)
@@ -63,10 +61,9 @@ class MLP(tf.keras.layers.Layer):
             input_length=len(nodes),
             embeddings_initializer=initializer
         )
-
-        result = layers.Dense(self.output_dim, 
-            activation="relu"
-            )(features(nodes))
+        # print(features(nodes).shape)
+        result = tf.linalg.matmul(features(nodes), self.mlp_weights)
+        # print(result.shape)
         # print_with_color("MLP result:")
         # print_with_color(result)
         # print_with_color("MLP embedding:")

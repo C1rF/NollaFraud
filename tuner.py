@@ -79,10 +79,9 @@ class MyHyperModel(keras_tuner.HyperModel):
 		# x1 = layers.Dense(hiddenLayerDim, activation="relu")(inputs)
 		# x2 = layers.Dense(hiddenLayerDim, activation="relu")(x1)
 		# outputs = layers.Dense(1, name="predictions")(x2)
-
-		dummy_model = NollaFraud(feat_data, adj_lists, prior)
 		
-		model = dummy_model
+		model = NollaFraud(feat_data, adj_lists, prior)
+		# model.build((32, ))
 
 		return model
 
@@ -127,8 +126,10 @@ class MyHyperModel(keras_tuner.HyperModel):
 				logits = model(x_batch_train, training=True)
 				# print_with_color("SCORE:")
 				# print_with_color(logits)
-				# print_with_color("LABELS:")
-				# print_with_color(y_batch_train)
+				print_with_color("PREDICTION:")
+				print_with_color(tf.math.sigmoid(logits).numpy().argmax(axis=1))
+				print_with_color("LABELS:")
+				print_with_color(tf.cast(y_batch_train, tf.int32))
 				loss_value = loss_fn(y_batch_train, logits)
 			grads = tape.gradient(loss_value, model.trainable_weights)
 			optimizer.apply_gradients(zip(grads, model.trainable_weights))
@@ -138,6 +139,9 @@ class MyHyperModel(keras_tuner.HyperModel):
 
 			return loss_value
 
+		# print_with_color("TRAINABLE WEIGHTS")
+		# print_with_color(model.trainable_weights)
+		# print_with_color(model.summary())
 		# Assign the model to the callbacks.
 		for callback in callbacks:
 			callback.model = model
@@ -172,7 +176,7 @@ class MyHyperModel(keras_tuner.HyperModel):
 					% (step, float(loss_value))
 				)
 				# print("Seen so far: %d samples" % ((step + 1) * batch_size))
-			
+				# model.print_stats()
 				# for layer in model.layers: print(layer.get_config(), layer.get_weights())
 			
 				# Display metrics at the end of each epoch.
