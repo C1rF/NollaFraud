@@ -3,19 +3,21 @@ import tensorflow as tf
 from tensorflow import keras
 from keras import layers, initializers
 from utils import *
+import math
 
 class NollaFraud(tf.keras.Model):
-    def __init__(self, feat_data, adj_lists, prior) -> None:
+    def __init__(self, feat_data, adj_lists, prior, embed_dim) -> None:
         super(NollaFraud, self).__init__()
-        self.mlp = MLP(feat_data, 64)
+        self.embed_dim = embed_dim
+        self.mlp = MLP(feat_data, self.embed_dim)
         self.feat_data = feat_data
         self.adj_lists = adj_lists
         self.prior = prior
-        self.inter_agg1 = InterAgg(64, self.mlp, self.adj_lists)
-        self.inter_agg2 = InterAgg(128, self.inter_agg1, self.adj_lists)
+        self.inter_agg1 = InterAgg(self.embed_dim, self.mlp, self.adj_lists)
+        self.inter_agg2 = InterAgg(self.embed_dim * 2, self.inter_agg1, self.adj_lists)
 
         initializer = tf.keras.initializers.GlorotUniform()
-        self.linear_weights = tf.Variable(initial_value = initializer(shape=(448, 2), dtype='float32'), trainable=True)
+        self.linear_weights = tf.Variable(initial_value = initializer(shape=((int(math.pow(2, 2+1)-1) * self.embed_dim), 2), dtype='float32'), trainable=True)
     
     def call(self, inputs):
         # x = self.mlp(inputs)
@@ -42,6 +44,9 @@ class NollaFraud(tf.keras.Model):
     def print_stats(self):
         print(self.linear.get_config(), self.linear.get_weights())
 
+    def save_weights(self, path):
+        print("Saving weights to: ", path)
+
 
 class MLP(tf.keras.layers.Layer):
     def __init__(self, feat_data, output_dim) -> None:
@@ -49,7 +54,7 @@ class MLP(tf.keras.layers.Layer):
         self.feat_data = feat_data
         self.output_dim = output_dim
         initializer = tf.keras.initializers.GlorotUniform()
-        self.mlp_weights = tf.Variable(initial_value = initializer(shape=(25, 64), dtype='float32'), trainable=True)
+        self.mlp_weights = tf.Variable(initial_value = initializer(shape=(25, self.output_dim), dtype='float32'), trainable=True)
 
     def call(self, nodes):
         # print('Input to the MLP: ', nodes)
