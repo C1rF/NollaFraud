@@ -166,7 +166,7 @@ class MyHyperModel(keras_tuner.HyperModel):
 		# Record the best validation loss value
 		best_epoch_loss = float("inf")
 
-		epochs = 1
+		epochs = 5
 		for epoch in range(epochs):
 			# Iterate over the batches of the dataset.
 			for step, (x_batch_train, y_batch_train) in enumerate(train_dataset):
@@ -223,7 +223,7 @@ class MyHyperModel(keras_tuner.HyperModel):
 
 tuner = keras_tuner.RandomSearch(
 	objective=keras_tuner.Objective("epoch_loss", "min"),
-	max_trials=10,
+	max_trials=15,
 	hypermodel=MyHyperModel(),
 	directory="customTunerResult",
 	project_name="hypertuning",
@@ -245,6 +245,8 @@ tuner.search(x=x_train, y=y_train, validation_data=(x_val, y_val))
 
 best_hps = tuner.get_best_hyperparameters()[0]
 print("hyperparameters with the best evaluation loss: ", best_hps.values)
+with open("best_hps.txt", "w") as f:
+	f.write(str(best_hps.values))
 
 
 
