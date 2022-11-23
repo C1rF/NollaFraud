@@ -204,23 +204,44 @@ class InterAgg(tf.keras.layers.Layer):
         """
         ## sum of neighbors of nodes in a full batch
 
-        if not isinstance(nodes, list):
-            nodes = nodes.numpy().tolist()
+        # if not isinstance(nodes, list):
+        #     nodes = nodes.numpy().tolist()
         
+        print("embed_dim: ", self.embed_dim)
+        print("nodes: ", nodes)
+
         # print("Length of nodes: ", len(nodes))
         neighbors_for_batch_nodes = []
         for adj_list in self.adj_lists:
-            neighbors_for_batch_nodes.append(   [  set(adj_list[int(node)]) for node in nodes   ]   )
+            # neighbors_for_batch_nodes.append(   [  set(adj_list[int(node)]) for node in nodes   ]   )
+            # neighbors_for_batch_nodes.append()
+            nodeNeighborTensor = tf.map_fn(fn=lambda node: tf.gather(adj_list, node), elems=nodes)
+            neighbors_for_batch_nodes.append(nodeNeighborTensor)
         
+        combined_tensor = tf.concat(neighbors_for_batch_nodes, axis=0)
+        combined_tensor = tf.reshape(combined_tensor, [-1])
+        combined_tensor = tf.concat([combined_tensor, nodes], axis=0)
+        unique_nodes_in_combined_tensor, idx = tf.unique(combined_tensor)
+
+        # extract non-negative values in unique_nodes_in_combined_tensor
+        unique_nodes_in_combined_tensor = tf.boolean_mask(unique_nodes_in_combined_tensor, unique_nodes_in_combined_tensor >= 0)
+        unique_nodes_in_combined_tensor = tf.sort(unique_nodes_in_combined_tensor)
+        print("unique_nodes_in_combined_tensor: ", unique_nodes_in_combined_tensor)
+
         ## a set of global indices containing all the batch nodes and their neighbors
-        unique_nodes_in_combined_set =  set.union(    set.union(*neighbors_for_batch_nodes[0])  ,   set.union(*neighbors_for_batch_nodes[1])  ,  set.union(*neighbors_for_batch_nodes[2], set(nodes))  )
+        # unique_nodes_in_combined_set =  set.union(    set.union(*neighbors_for_batch_nodes[0])  ,   set.union(*neighbors_for_batch_nodes[1])  ,  set.union(*neighbors_for_batch_nodes[2], set(nodes))  )
         
+        # print("unique_nodes_in_combined_set: ", unique_nodes_in_combined_set)
+        
+        # TODO: Modify all sets, dicts, lists and iterations to tensors from here.
+
         ## an index mapping: from global index n to local index i w.r.t combined_set
-        unique_nodes_new_index_dictionary = {n: i for i, n in enumerate(list(unique_nodes_in_combined_set))}
+        unique_nodes_new_index_dictionary = {n: i for i, n in enumerate(list(unique_nodes_in_combined_tensor))}
+        
         
         ## extract features of nodes in combined_set from all features
         # print("Inputs to the previous layer in InterAgg: ",list(unique_nodes_in_combined_set))
-        combined_set_features = self.previous_layer(tf.constant(list(unique_nodes_in_combined_set)))
+        combined_set_features = self.previous_layer(tf.constant(list(unique_nodes_in_combined_tensor)))
         # print("Previous Layer Output Shape: ", combined_set_features.shape)
         
         # print("current embedding dim: ", self.embed_dim)
