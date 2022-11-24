@@ -5,40 +5,49 @@ from keras import layers, initializers
 from utils import *
 import math
 
+class Linear(keras.layers.Layer):
+    def __init__(self, units):
+        super(Linear, self).__init__()
+        self.units = units
+
+    def build(self, input_shape):
+        self.w = self.add_weight(
+            shape=(input_shape[-1], self.units),
+            initializer="GlorotUniform",
+            trainable=True,
+        )
+        self.b = self.add_weight(shape=(self.units,), initializer="Zeros", trainable=True)
+
+    def call(self, inputs):
+        return tf.matmul(inputs, self.w) + self.b
+
 class NollaFraud(tf.keras.Model):
     def __init__(self, feat_data, adj_lists, prior, embed_dim) -> None:
+        
         super(NollaFraud, self).__init__()
+
         self.embed_dim = embed_dim
-        self.mlp = MLP(feat_data, self.embed_dim)
         self.feat_data = feat_data
         self.adj_lists = adj_lists
         self.prior = prior
+
+        self.mlp = MLP(feat_data, feat_data.shape[1], self.embed_dim)
         self.inter_agg1 = InterAgg(self.embed_dim, self.mlp, self.adj_lists)
         self.inter_agg2 = InterAgg(self.embed_dim * 2, self.inter_agg1, self.adj_lists)
 
-        initializer = tf.keras.initializers.GlorotUniform()
-        self.linear_weights = tf.Variable(initial_value = initializer(shape=((int(math.pow(2, 2+1)-1) * self.embed_dim), 2), dtype='float32'), trainable=True)
+        self.linear = Linear(2)
+
+        # initializer_w = tf.keras.initializers.GlorotUniform()
+        # initializer_b = tf.keras.initializers.Zeros()
+        # self.linear_weights = tf.Variable(initial_value = initializer_w(shape=((int(math.pow(2, 3)-1) * self.embed_dim), 2), dtype='float32'), trainable=True)
+        # self.linear_bias = tf.Variable(initial_value = initializer_b(shape=((int(math.pow(2, 3)-1) * self.embed_dim),), dtype='float32'), trainable=True)
+
     
     def call(self, inputs):
-        # x = self.mlp(inputs)
-        # x = self.inter_agg1(inputs, self.mlp, self.adj_list)
-        # print('Input to the model: ', inputs)
         x = self.inter_agg2(inputs)
-        x = tf.linalg.matmul(x, self.linear_weights)
-
+        # x = tf.linalg.matmul(x, self.linear_weights) + self.linear_bias
+        x = self.linear(x)
         x = tf.cast(x, tf.float64) + tf.cast(tf.math.log(self.prior), tf.float64)
-    
-        # print_with_color("loss scores_model")
-        # print_with_color(tf.cast(x, tf.float64) + tf.cast(tf.math.log(self.prior), tf.float64))
-
-        
-        # x = layers.LeakyReLU(alpha=0.3)(x)
-        # print_with_color("AGG RES:")
-        # print_with_color(x)
-        # x = layers.Dense(1, activation="sigmoid")(tf.cast(x, tf.float64) + tf.cast(tf.math.log(self.prior), tf.float64))
-        # x = layers.Softmax()(x)
-        # x = tf.math.argmax(x, 1)
-        # print("SCORE: ", x)
         return x
 
     def print_stats(self):
@@ -49,12 +58,12 @@ class NollaFraud(tf.keras.Model):
 
 
 class MLP(tf.keras.layers.Layer):
-    def __init__(self, feat_data, output_dim) -> None:
+    def __init__(self, feat_data, input_dim, output_dim) -> None:
         super(MLP, self).__init__()
         self.feat_data = feat_data
-        self.output_dim = output_dim
-        initializer = tf.keras.initializers.GlorotUniform()
-        self.mlp_weights = tf.Variable(initial_value = initializer(shape=(25, self.output_dim), dtype='float32'), trainable=True)
+        # initializer = tf.keras.initializers.GlorotUniform()
+        # self.mlp_weights = tf.Variable(initial_value = initializer(shape=(input_dim, output_dim), dtype='float32'), trainable=True)
+        self.linear = Linear(output_dim)
 
     def call(self, nodes):
         # print('Input to the MLP: ', nodes)
@@ -66,14 +75,7 @@ class MLP(tf.keras.layers.Layer):
             input_length=len(nodes),
             embeddings_initializer=initializer
         )
-        # print(features(nodes).shape)
-        result = tf.linalg.matmul(features(nodes), self.mlp_weights)
-        # print(result.shape)
-        # print_with_color("MLP result:")
-        # print_with_color(result)
-        # print_with_color("MLP embedding:")
-        # print_with_color(features(nodes))
-        return result
+        return self.linear(features(nodes))
 
 # class IntraAgg_(tf.keras.layers.Layer):
 #     """Intra-aggregation layer"""
