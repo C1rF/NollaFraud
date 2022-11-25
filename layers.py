@@ -187,7 +187,7 @@ class InterAgg(tf.keras.layers.Layer):
         ## Set up the InterAgg variable
         self.embed_dim = embed_dim
         self.previous_layer = previous_layer
-        self.adj_lists = adj_lists
+        self.adj_lists = tf.cast(adj_lists, tf.int64)
         ## Glorot uniform initializer = Xavier uniform initializer
         initializer = tf.keras.initializers.GlorotUniform()
         self.alpha = tf.Variable(initial_value = initializer(shape=(self.embed_dim*2, 3), dtype='float32') , trainable=True)
@@ -210,6 +210,7 @@ class InterAgg(tf.keras.layers.Layer):
         
         print("embed_dim: ", self.embed_dim)
         print("nodes: ", nodes)
+        nodes = tf.cast(nodes, tf.int64)
 
         # print("Length of nodes: ", len(nodes))
         neighbors_for_batch_nodes = []
@@ -219,6 +220,7 @@ class InterAgg(tf.keras.layers.Layer):
             nodeNeighborTensor = tf.map_fn(fn=lambda node: tf.gather(adj_list, node), elems=nodes)
             neighbors_for_batch_nodes.append(nodeNeighborTensor)
 
+        neighbors_for_batch_nodes = tf.cast(neighbors_for_batch_nodes, tf.int64)
         print("neighbors_for_batch_nodes: ", neighbors_for_batch_nodes)
         
         combined_tensor = tf.concat(neighbors_for_batch_nodes, axis=0)
@@ -243,19 +245,21 @@ class InterAgg(tf.keras.layers.Layer):
         
         unique_nodes_new_index_tensor = unique_nodes_in_combined_tensor
 
+        print("unique_nodes_new_index_tensor: ", unique_nodes_new_index_tensor)
         
         ## extract features of nodes in combined_set from all features
         # print("Inputs to the previous layer in InterAgg: ",list(unique_nodes_in_combined_set))
-        combined_set_features = self.previous_layer(tf.constant(list(unique_nodes_in_combined_tensor)))
+        # combined_set_features = self.previous_layer(tf.constant(list(unique_nodes_in_combined_tensor)))
+        combined_set_features = self.previous_layer(unique_nodes_in_combined_tensor)
         # print("Previous Layer Output Shape: ", combined_set_features.shape)
         
         # print("current embedding dim: ", self.embed_dim)
         # print("BATCH FEATURES: ", combined_set_features)
 
         ## get lists of neighbors' indices for each relation
-        r1_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[0]] # [set,...,set] 
-        r2_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[1]] # [set,...,set] 
-        r3_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[2]] # [set,...,set]
+        # r1_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[0]] # [set,...,set] 
+        # r2_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[1]] # [set,...,set] 
+        # r3_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[2]] # [set,...,set]
         
         r1_list_tensor = neighbors_for_batch_nodes[0]
         r2_list_tensor = neighbors_for_batch_nodes[1]
@@ -263,13 +267,15 @@ class InterAgg(tf.keras.layers.Layer):
 
 
         ## get the local index of all batch nodes
-        batch_nodes_new_index = [unique_nodes_new_index_dictionary[int(n)] for n in nodes]
+        # batch_nodes_new_index = [unique_nodes_new_index_dictionary[int(n)] for n in nodes]
         # print("batch nodes new index: ", batch_nodes_new_index)
         
         batch_nodes_new_index_tensor = tf.map_fn(
             fn=lambda node: tf.where(unique_nodes_new_index_tensor == node), 
             elems=nodes
             )
+
+        batch_nodes_new_index_tensor = tf.reshape(batch_nodes_new_index_tensor, [-1])
 
         
         print("batch_nodes_new_index_tensor: ", batch_nodes_new_index_tensor)
@@ -279,13 +285,14 @@ class InterAgg(tf.keras.layers.Layer):
         # print("New Index:", batch_nodes_new_index)
         ## get the features of all batch nodes (it is part of combined_set_features by excluding the neighbors' rows)
         ## batch_nodes_features = combined_set_features[batch_nodes_new_index]
-        batch_nodes_features = tf.gather(combined_set_features, batch_nodes_new_index)
+        # batch_nodes_features = tf.gather(combined_set_features, batch_nodes_new_index)
+        batch_nodes_features = tf.gather(combined_set_features, batch_nodes_new_index_tensor)
         
         # print("self features: ", batch_nodes_features)
 
-        r1_new_embedding_features = self.intraAgg1(combined_set_features[:, -self.embed_dim:], nodes, r1_list, unique_nodes_new_index_dictionary, batch_nodes_features[:, -self.embed_dim:])
-        r2_new_embedding_features = self.intraAgg2(combined_set_features[:, -self.embed_dim:], nodes, r2_list, unique_nodes_new_index_dictionary, batch_nodes_features[:, -self.embed_dim:])
-        r3_new_embedding_features = self.intraAgg3(combined_set_features[:, -self.embed_dim:], nodes, r3_list, unique_nodes_new_index_dictionary, batch_nodes_features[:, -self.embed_dim:])
+        r1_new_embedding_features = self.intraAgg1(combined_set_features[:, -self.embed_dim:], nodes, r1_list_tensor, unique_nodes_new_index_tensor, batch_nodes_features[:, -self.embed_dim:])
+        r2_new_embedding_features = self.intraAgg2(combined_set_features[:, -self.embed_dim:], nodes, r2_list_tensor, unique_nodes_new_index_tensor, batch_nodes_features[:, -self.embed_dim:])
+        r3_new_embedding_features = self.intraAgg3(combined_set_features[:, -self.embed_dim:], nodes, r3_list_tensor, unique_nodes_new_index_tensor, batch_nodes_features[:, -self.embed_dim:])
         
         neighbors_features_all_relations_concat = tf.concat((r1_new_embedding_features,
                                                              r2_new_embedding_features, 
