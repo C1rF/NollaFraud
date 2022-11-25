@@ -17,10 +17,10 @@ from layers import NollaFraud
 """
 
 import os
-tf.config.threading.set_intra_op_parallelism_threads(32)
-tf.config.threading.set_inter_op_parallelism_threads(32)
-os.environ['TF_NUM_INTEROP_THREADS'] = '32'
-os.environ['TF_NUM_INTRAOP_THREADS'] = '32'
+tf.config.threading.set_intra_op_parallelism_threads(16)
+tf.config.threading.set_inter_op_parallelism_threads(16)
+os.environ['TF_NUM_INTEROP_THREADS'] = '16'
+os.environ['TF_NUM_INTRAOP_THREADS'] = '16'
 
 parser = argparse.ArgumentParser()
 
@@ -82,7 +82,7 @@ def build():
 	# x2 = layers.Dense(hiddenLayerDim, activation="relu")(x1)
 	# outputs = layers.Dense(1, name="predictions")(x2)
 	
-	embed_dim = 64
+	embed_dim = 96
 
 	print(">>>>>>>>>>>>>>>>>\n\n\n\n\n")
 	print("adj_ndarray", adjlist_to_ndarray(adj_lists[0]))
@@ -100,7 +100,7 @@ def build():
 
 def fit(model, x, y, validation_data):
 
-	batch_size = 8
+	batch_size = 128
 	# Prepare the training dataset.
 	train_dataset = tf.data.Dataset.from_tensor_slices((x, y))
 	train_dataset = train_dataset.batch(batch_size)
@@ -110,7 +110,7 @@ def fit(model, x, y, validation_data):
 	val_dataset = val_dataset.batch(batch_size)
 
 	# Instantiate an optimizer.
-	learningRate = 0.1
+	learningRate = 0.05
 	optimizer = keras.optimizers.Adam(learning_rate=learningRate)
 	
 	
@@ -132,14 +132,15 @@ def fit(model, x, y, validation_data):
 	val_epoch_loss_avg = keras.metrics.Mean()
 
 
-	# @tf.function
+	@tf.function
 	def run_train_step(x_batch_train, y_batch_train):
 		with tf.GradientTape() as tape:
 			logits = model(x_batch_train, training=True)
 			# print_with_color("SCORE:")
 			# print_with_color(logits)
 			print_with_color("PREDICTION:")
-			print_with_color(tf.math.sigmoid(logits).numpy().argmax(axis=1))
+			# print_with_color(tf.math.sigmoid(logits).numpy().argmax(axis=1))
+			print_with_color(tf.math.argmax(tf.math.sigmoid(logits), axis=1))
 			print_with_color("LABELS:")
 			print_with_color(tf.cast(y_batch_train, tf.int32))
 			loss_value = loss_fn(y_batch_train, logits)
@@ -156,7 +157,7 @@ def fit(model, x, y, validation_data):
 	# print_with_color(model.summary())
 	# Assign the model to the callbacks.
 
-	# @tf.function
+	@tf.function
 	def run_val_step(x_batch_val, y_batch_val):
 		val_logits = model(x_batch_val, training=False)
 		loss_value = loss_fn(y_batch_val, val_logits)
