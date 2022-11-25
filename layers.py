@@ -95,7 +95,8 @@ class IntraAgg(tf.keras.layers.Layer):
 
     def __init__(self) -> None:
         super().__init__()
-
+    # [{1, 2, 3}, {2, 3, 4, 6, 1}, {3, 4, 5}]
+    # 
     def call(self, embedding, nodes, neighbor_lists, unique_nodes_new_index, self_feats):
         """
         Code partially from https://github.com/williamleif/graphsage-simple/
@@ -217,6 +218,8 @@ class InterAgg(tf.keras.layers.Layer):
             # neighbors_for_batch_nodes.append()
             nodeNeighborTensor = tf.map_fn(fn=lambda node: tf.gather(adj_list, node), elems=nodes)
             neighbors_for_batch_nodes.append(nodeNeighborTensor)
+
+        print("neighbors_for_batch_nodes: ", neighbors_for_batch_nodes)
         
         combined_tensor = tf.concat(neighbors_for_batch_nodes, axis=0)
         combined_tensor = tf.reshape(combined_tensor, [-1])
@@ -236,8 +239,10 @@ class InterAgg(tf.keras.layers.Layer):
         # TODO: Modify all sets, dicts, lists and iterations to tensors from here.
 
         ## an index mapping: from global index n to local index i w.r.t combined_set
-        unique_nodes_new_index_dictionary = {n: i for i, n in enumerate(list(unique_nodes_in_combined_tensor))}
+        # unique_nodes_new_index_dictionary = {n: i for i, n in enumerate(list(unique_nodes_in_combined_tensor))}
         
+        unique_nodes_new_index_tensor = unique_nodes_in_combined_tensor
+
         
         ## extract features of nodes in combined_set from all features
         # print("Inputs to the previous layer in InterAgg: ",list(unique_nodes_in_combined_set))
@@ -252,10 +257,24 @@ class InterAgg(tf.keras.layers.Layer):
         r2_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[1]] # [set,...,set] 
         r3_list = [set(neighbors_for_single_node) for neighbors_for_single_node in neighbors_for_batch_nodes[2]] # [set,...,set]
         
+        r1_list_tensor = neighbors_for_batch_nodes[0]
+        r2_list_tensor = neighbors_for_batch_nodes[1]
+        r3_list_tensor = neighbors_for_batch_nodes[2]
+
+
         ## get the local index of all batch nodes
         batch_nodes_new_index = [unique_nodes_new_index_dictionary[int(n)] for n in nodes]
         # print("batch nodes new index: ", batch_nodes_new_index)
         
+        batch_nodes_new_index_tensor = tf.map_fn(
+            fn=lambda node: tf.where(unique_nodes_new_index_tensor == node), 
+            elems=nodes
+            )
+
+        
+        print("batch_nodes_new_index_tensor: ", batch_nodes_new_index_tensor)
+
+
         # print("Length of batch_nodes_new_index: ", len(batch_nodes_new_index))
         # print("New Index:", batch_nodes_new_index)
         ## get the features of all batch nodes (it is part of combined_set_features by excluding the neighbors' rows)
