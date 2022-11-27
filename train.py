@@ -18,8 +18,8 @@ parser = argparse.ArgumentParser()
 
 # dataset and model dependent args
 parser.add_argument('--data', type=str, default='amazon', help='The dataset name. [Amazon_demo, Yelp_demo, amazon,yelp]')
-parser.add_argument('--batch_size', type=int, default=64, help='Batch size 1024 for yelp, 256 for amazon.')
-parser.add_argument('--lr', type=float, default=0.1, help='Initial learning rate. [0.1 for amazon and 0.001 for yelp]')
+parser.add_argument('--batch_size', type=int, default=128, help='Batch size 1024 for yelp, 256 for amazon.')
+parser.add_argument('--lr', type=float, default=0.05, help='Initial learning rate. [0.1 for amazon and 0.001 for yelp]')
 parser.add_argument('--lambda_1', type=float, default=1e-4, help='Weight decay (L2 loss weight).')
 parser.add_argument('--embed_dim', type=int, default=96, help='Node embedding size at the first layer.')
 parser.add_argument('--num_epochs', type=int, default=21, help='Number of epochs.')
