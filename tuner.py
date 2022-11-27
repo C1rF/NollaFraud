@@ -9,6 +9,8 @@ import numpy as np
 import keras_tuner
 
 from layers import NollaFraud
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
 """
@@ -47,6 +49,7 @@ homo, relation1, relation2, relation3, feat_data, labels = load_data(args.data)
 feat_data = normalize(feat_data)
 
 adj_lists = [relation1, relation2, relation3]
+adj_lists = [adjlist_to_ndarray(adj_list) for adj_list in adj_lists]
 
 np.random.seed(args.seed)
 random.seed(args.seed)
@@ -105,6 +108,7 @@ class MyHyperModel(keras_tuner.HyperModel):
 
         val_epoch_loss_avg = keras.metrics.Mean()
 
+        @tf.function
         def run_train_step(x_batch_train, y_batch_train):
             with tf.GradientTape() as tape:
                 logits = model(x_batch_train, training=True)
@@ -119,6 +123,7 @@ class MyHyperModel(keras_tuner.HyperModel):
         for callback in callbacks:
             callback.model = model
 
+        @tf.function
         def run_val_step(x_batch_val, y_batch_val):
             val_logits = model(x_batch_val, training=False)
             loss_value = loss_fn(y_batch_val, val_logits)

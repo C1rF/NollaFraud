@@ -9,6 +9,8 @@ from keras import layers
 import numpy as np
 
 from layers import NollaFraud
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 """
    NollaFraud
@@ -50,6 +52,7 @@ homo, relation1, relation2, relation3, feat_data, labels = load_data(args.data)
 
 feat_data = normalize(feat_data)
 adj_lists = [relation1, relation2, relation3]
+adj_lists = [adjlist_to_ndarray(adj_list) for adj_list in adj_lists]
 
 np.random.seed(args.seed)
 random.seed(args.seed)
