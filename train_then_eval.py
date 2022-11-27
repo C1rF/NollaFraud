@@ -16,11 +16,17 @@ from layers import NollaFraud
    Source: https://github.com/C1rF/NollaFraud
 """
 
+import os
+tf.config.threading.set_intra_op_parallelism_threads(16)
+tf.config.threading.set_inter_op_parallelism_threads(16)
+os.environ['TF_NUM_INTEROP_THREADS'] = '16'
+os.environ['TF_NUM_INTRAOP_THREADS'] = '16'
+
 parser = argparse.ArgumentParser()
 
 # dataset and model dependent args
 parser.add_argument('--data', type=str, default='amazon', help='The dataset name. [Amazon_demo, Yelp_demo, amazon,yelp]')
-parser.add_argument('--batch_size', type=int, default=32, help='Batch size 1024 for yelp, 256 for amazon.')
+parser.add_argument('--batch_size', type=int, default=256, help='Batch size 1024 for yelp, 256 for amazon.')
 parser.add_argument('--lr', type=float, default=0.1, help='Initial learning rate. [0.1 for amazon and 0.001 for yelp]')
 parser.add_argument('--lambda_1', type=float, default=1e-4, help='Weight decay (L2 loss weight).')
 parser.add_argument('--embed_dim', type=int, default=64, help='Node embedding size at the first layer.')
@@ -51,8 +57,8 @@ if args.data == 'yelp':
 elif args.data == 'amazon':
 	# 0-3304 are unlabeled nodes
 	index = list(range(3305, len(labels)))
-	x_train, x_val, y_train, y_val = train_test_split(index, labels[3305:], stratify = labels[3305:],
-															test_size = 0.90, random_state = 2, shuffle = True)
+	x_train, x_val, y_train, y_val = train_test_split(index, labels[3305:], 
+															test_size = 0.90, random_state = 2, shuffle = False)
 else:
 	exit("Dataset not supported")
 
@@ -78,7 +84,14 @@ def build():
 	
 	embed_dim = 96
 
-	model = NollaFraud(feat_data, adj_lists, prior, embed_dim)
+	# print(">>>>>>>>>>>>>>>>>\n\n\n\n\n")
+	# print("adj_ndarray", adjlist_to_ndarray(adj_lists[0]))
+
+	adj_arrs = [adjlist_to_ndarray(adj_list) for adj_list in adj_lists]
+
+	# print("test: ", adj_arrs[0][3305])
+
+	model = NollaFraud(feat_data, adj_arrs, prior, embed_dim)
 	# model.build((32, ))
 
 	return model
@@ -111,24 +124,24 @@ def fit(model, x, y, validation_data):
 	train_acc_metric = keras.metrics.SparseCategoricalAccuracy()
 	val_acc_metric = keras.metrics.SparseCategoricalAccuracy()
 	# val_auc_metric = keras.metrics.AUC(from_logits=True)
-	val_precision_metric = keras.metrics.Precision()
-	val_recall_metric = keras.metrics.Recall()
+	# val_precision_metric = keras.metrics.Precision()
+	# val_recall_metric = keras.metrics.Recall()
 	# TODO: Find a method to calculate f1scores
 	# val_f1_metric = tfa.metrics.F1Score(num_classes=2)
 
 	val_epoch_loss_avg = keras.metrics.Mean()
 
 
-	# @tf.function
+	@tf.function
 	def run_train_step(x_batch_train, y_batch_train):
 		with tf.GradientTape() as tape:
 			logits = model(x_batch_train, training=True)
 			# print_with_color("SCORE:")
 			# print_with_color(logits)
-			print_with_color("PREDICTION:")
-			print_with_color(tf.math.sigmoid(logits).numpy().argmax(axis=1))
-			print_with_color("LABELS:")
-			print_with_color(tf.cast(y_batch_train, tf.int32))
+			# print_with_color("PREDICTION:")
+			# print_with_color(tf.math.sigmoid(logits).numpy().argmax(axis=1))
+			# print_with_color("LABELS:")
+			# print_with_color(tf.cast(y_batch_train, tf.int32))
 			loss_value = loss_fn(y_batch_train, logits)
 		grads = tape.gradient(loss_value, model.trainable_weights)
 		optimizer.apply_gradients(zip(grads, model.trainable_weights))
@@ -143,18 +156,18 @@ def fit(model, x, y, validation_data):
 	# print_with_color(model.summary())
 	# Assign the model to the callbacks.
 
-	# @tf.function
+	@tf.function
 	def run_val_step(x_batch_val, y_batch_val):
 		val_logits = model(x_batch_val, training=False)
 		loss_value = loss_fn(y_batch_val, val_logits)
 		# Update val metrics
 		val_acc_metric.update_state(y_batch_val, val_logits)
 		# val_auc_metric.update_state(y_batch_val, val_logits)
-		print("val_logits: ", val_logits)
-		sigmoid_results = tf.keras.layers.Dense(1, activation="sigmoid")(val_logits)
-		print("val_logits sigmoid: ", sigmoid_results)
-		val_precision_metric.update_state(y_batch_val, sigmoid_results)
-		val_recall_metric.update_state(y_batch_val, sigmoid_results)
+		# print("val_logits: ", val_logits)
+		# sigmoid_results = tf.keras.layers.Dense(1, activation="sigmoid")(val_logits)
+		# print("val_logits sigmoid: ", sigmoid_results)
+		# val_precision_metric.update_state(y_batch_val, sigmoid_results)
+		# val_recall_metric.update_state(y_batch_val, sigmoid_results)
 		# val_f1_metric.update_state(y_batch_val, val_logits)
 		val_epoch_loss_avg.update_state(loss_value)
 
@@ -164,7 +177,7 @@ def fit(model, x, y, validation_data):
 	# Record the best validation loss value
 	best_epoch_loss = float("inf")
 
-	epochs = 5
+	epochs = 61
 	for epoch in range(epochs):
 		# Iterate over the batches of the dataset.
 		for step, (x_batch_train, y_batch_train) in enumerate(train_dataset):
@@ -190,26 +203,26 @@ def fit(model, x, y, validation_data):
 		# Run a validation loop at the end of each epoch.
 		for x_batch_val, y_batch_val in val_dataset:
 			val_loss_value = run_val_step(x_batch_val, y_batch_val)
-			print("Validation loss: %.4f" % (float(val_loss_value),))
+			# print("Validation loss: %.4f" % (float(val_loss_value),))
 
 		val_acc = val_acc_metric.result()
 		# val_auc = val_auc_metric.result()
-		val_precision = val_precision_metric.result()
-		val_recall = val_recall_metric.result()
+		# val_precision = val_precision_metric.result()
+		# val_recall = val_recall_metric.result()
 		# val_f1 = val_f1_metric.result()
 		val_loss = float(val_epoch_loss_avg.result().numpy())
 
 
 		val_acc_metric.reset_states()
 		# val_auc_metric.reset_states()
-		val_precision_metric.reset_states()
-		val_recall_metric.reset_states()
+		# val_precision_metric.reset_states()
+		# val_recall_metric.reset_states()
 		# val_f1_metric.reset_states()
 		val_epoch_loss_avg.reset_states()
 		print("Validation acc: %.4f" % (float(val_acc),))
 		# print("Validation auc: %.4f" % (float(val_auc),))
-		print("Validation precision: %.4f" % (float(val_precision),))
-		print("Validation recall: %.4f" % (float(val_recall),))
+		# print("Validation precision: %.4f" % (float(val_precision),))
+		# print("Validation recall: %.4f" % (float(val_recall),))
 		# print("Validation f1: %.4f" % (float(val_f1),))
 		print("Validation loss: %.4f" % (float(val_loss),))
 
