@@ -3,11 +3,18 @@ from sklearn.model_selection import train_test_split
 from utils import *
 from layers import *
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 import tensorflow as tf
 from tensorflow import keras
 
+import time
+import os
+# tf.config.threading.set_intra_op_parallelism_threads(64)
+# tf.config.threading.set_inter_op_parallelism_threads(64)
+# os.environ['TF_NUM_INTEROP_THREADS'] = '64'
+# os.environ['TF_NUM_INTRAOP_THREADS'] = '64'
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 """
    NollaFraud
@@ -22,8 +29,8 @@ parser.add_argument('--batch_size', type=int, default=128, help='Batch size 1024
 parser.add_argument('--lr', type=float, default=0.05, help='Initial learning rate. [0.1 for amazon and 0.001 for yelp]')
 parser.add_argument('--lambda_1', type=float, default=1e-4, help='Weight decay (L2 loss weight).')
 parser.add_argument('--embed_dim', type=int, default=96, help='Node embedding size at the first layer.')
-parser.add_argument('--num_epochs', type=int, default=21, help='Number of epochs.')
-parser.add_argument('--test_epochs', type=int, default=10, help='Epoch interval to run test set.')
+parser.add_argument('--num_epochs', type=int, default=20, help='Number of epochs.')
+parser.add_argument('--test_epochs', type=int, default=30, help='Epoch interval to run test set.')
 parser.add_argument('--seed', type=int, default=123, help='Random seed.')
 parser.add_argument('--no_cuda', action='store_true', default=False, help='Disables CUDA training.')
 
@@ -76,11 +83,30 @@ model = NollaFraud(feat_data, adj_lists, prior, args.embed_dim)
 model.compile(optimizer=optimizer, loss=loss_fn, metrics=['accuracy'])
 print(model.trainable_weights)
 
-train_history = model.fit(train_dataset, batch_size=args.batch_size, epochs=args.num_epochs)
+
+class TimeHistory(keras.callbacks.Callback):
+    def on_train_begin(self, logs={}):
+        self.times = []
+
+    def on_epoch_begin(self, batch, logs={}):
+        self.epoch_time_start = time.time()
+
+    def on_epoch_end(self, batch, logs={}):
+        self.times.append(time.time() - self.epoch_time_start)
+
+time_callback = TimeHistory()
+
+train_history = model.fit(train_dataset, batch_size=args.batch_size, epochs=args.num_epochs, callbacks=[time_callback])
 print('Train history: ', train_history.history)
 
-results = model.evaluate(test_dataset, batch_size=args.batch_size)
-print("Test performance: ", results)
+overall_time = 0.0
+for t in time_callback.times:
+	overall_time += t
+time_per_epoch = overall_time / args.num_epochs
+print('Time per epoch: ', time_per_epoch)
+
+# results = model.evaluate(test_dataset, batch_size=args.batch_size)
+# print("Test performance: ", results)
 
 # train_loss_results = []
 # train_accuracy_results = []
