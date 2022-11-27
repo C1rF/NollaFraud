@@ -14,7 +14,7 @@ import os
 # tf.config.threading.set_inter_op_parallelism_threads(64)
 # os.environ['TF_NUM_INTEROP_THREADS'] = '64'
 # os.environ['TF_NUM_INTRAOP_THREADS'] = '64'
-# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 """
    NollaFraud
