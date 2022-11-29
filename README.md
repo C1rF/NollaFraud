@@ -5,7 +5,7 @@ Ubuntu 20.04.5 LTS
 
 ### Configurations
 <div>Download the repository</div> 
-<code>git clone "https://github.com/C1rF/NollaFraud/edit/master/README.md"</code>
+<code>git clone "https://github.com/C1rF/NollaFraud"</code>
 <br/>
 
 config the environment: <br/>
